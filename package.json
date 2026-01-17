@@ -1,0 +1,95 @@
+{
+  "name": "@maggiezinger/nextjs-stripe",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./billing": {
+      "types": "./dist/billing/index.d.ts",
+      "import": "./dist/billing/index.js"
+    },
+    "./webhook": {
+      "types": "./dist/webhook/index.d.ts",
+      "import": "./dist/webhook/index.js"
+    },
+    "./env/server": {
+      "types": "./dist/env/server.d.ts",
+      "import": "./dist/env/server.js"
+    },
+    "./env/client": {
+      "types": "./dist/env/client.d.ts",
+      "import": "./dist/env/client.js"
+    },
+    "./stripe/server": {
+      "types": "./dist/stripe/server.d.ts",
+      "import": "./dist/stripe/server.js"
+    },
+    "./stripe/client": {
+      "types": "./dist/stripe/client.d.ts",
+      "import": "./dist/stripe/client.js"
+    },
+    "./supabase/server": {
+      "types": "./dist/supabase/server.d.ts",
+      "import": "./dist/supabase/server.js"
+    },
+    "./supabase/client": {
+      "types": "./dist/supabase/client.d.ts",
+      "import": "./dist/supabase/client.js"
+    },
+    "./supabase/admin": {
+      "types": "./dist/supabase/admin.d.ts",
+      "import": "./dist/supabase/admin.js"
+    },
+    "./ui/button": {
+      "types": "./dist/ui/button.d.ts",
+      "import": "./dist/ui/button.js"
+    },
+    "./ui/card": {
+      "types": "./dist/ui/card.d.ts",
+      "import": "./dist/ui/card.js"
+    },
+    "./ui/cn": {
+      "types": "./dist/ui/cn.d.ts",
+      "import": "./dist/ui/cn.js"
+    }
+  },
+  "files": [
+    "dist",
+    "supabase/migrations"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.0.2",
+    "@stripe/react-stripe-js": "^2.7.3",
+    "@stripe/stripe-js": "^4.3.0",
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.49.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "server-only": "^0.0.1",
+    "stripe": "^16.12.0",
+    "tailwind-merge": "^2.5.4",
+    "zod": "^3.23.8"
+  },
+  "peerDependencies": {
+    "next": ">=15.0.0",
+    "react": ">=18.2.0",
+    "react-dom": ">=18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/react": "^18.3.3",
+    "tsup": "^8.1.0",
+    "typescript": "^5.5.4"
+  }
+}
