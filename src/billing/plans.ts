@@ -46,6 +46,7 @@ export const billingPlans: BillingPlan[] = [
 ]
 
 export const getBillingPlansWithStripePricing = async () => {
+  'use server'
   const plans = await Promise.all(
     billingPlans.map(async (plan) => {
       try {
