@@ -3,7 +3,8 @@ import { defineConfig } from 'tsup'
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
-    'billing/index': 'src/billing/index.ts',
+    'billing/server': 'src/billing/server.ts',
+    'billing/client': 'src/billing/client.tsx',
     'webhook/index': 'src/webhook/index.ts',
     'env/server': 'src/env/server.ts',
     'env/client': 'src/env/client.ts',

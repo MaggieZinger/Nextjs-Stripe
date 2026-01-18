@@ -33,7 +33,10 @@ STRIPE_PRICE_PRO_ANNUAL=
 Billing page:
 
 ```tsx
-import { BillingForm, getBillingPlansWithStripePricing, getBillingProfile } from '@maggiezinger/nextjs-stripe/billing'
+import {
+    getBillingPlansWithStripePricing,
+    getBillingProfile
+} from '@maggiezinger/nextjs-stripe/billing/server'
 
 export default async function BillingPage() {
   const [plans, profileResult] = await Promise.all([

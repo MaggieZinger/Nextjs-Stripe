@@ -10,9 +10,13 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./billing": {
-      "types": "./dist/billing/index.d.ts",
-      "import": "./dist/billing/index.js"
+    "./billing/server": {
+      "types": "./dist/billing/server.d.ts",
+      "import": "./dist/billing/server.js"
+    },
+    "./billing/client": {
+      "types": "./dist/billing/client.d.ts",
+      "import": "./dist/billing/client.js"
     },
     "./webhook": {
       "types": "./dist/webhook/index.d.ts",
