@@ -5,7 +5,6 @@ import type { FormEvent } from 'react'
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import type { StripePaymentElementOptions } from '@stripe/stripe-js'
 import { stripePromise } from '../stripe/client'
-import { createPaymentIntent, createSubscription } from './actions'
 import { Button } from '../ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 
@@ -26,9 +25,15 @@ type BillingProfile = {
   feature_flags: unknown
 }
 
+type BillingActions = {
+  createPaymentIntent: (priceId: string) => Promise<{ clientSecret?: string | null; error?: string }>
+  createSubscription: (priceId: string) => Promise<{ clientSecret?: string | null; error?: string }>
+}
+
 type BillingFormProps = {
   plans: BillingPlan[]
   profile: BillingProfile | null
+  actions: BillingActions
 }
 
 type PaymentFormProps = {
@@ -51,9 +56,7 @@ const PaymentForm = ({ onClose, paymentElementOptions }: PaymentFormProps) => {
 
     const result = await stripe.confirmPayment({
       elements,
-      confirmParams: {
-        return_url: `${window.location.origin}/dashboard/billing`
-      },
+      confirmParams: { return_url: `${window.location.origin}/dashboard/billing` },
       redirect: 'if_required'
     })
 
@@ -68,38 +71,32 @@ const PaymentForm = ({ onClose, paymentElementOptions }: PaymentFormProps) => {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <PaymentElement options={paymentElementOptions} />
-      {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
-      <Button type="submit" disabled={!stripe || isSubmitting}>
-        {isSubmitting ? 'Processing...' : 'Confirm payment'}
-      </Button>
-    </form>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <PaymentElement options={paymentElementOptions} />
+        {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+        <Button type="submit" disabled={!stripe || isSubmitting}>
+          {isSubmitting ? 'Processing...' : 'Confirm payment'}
+        </Button>
+      </form>
   )
 }
 
-export const BillingForm = ({ plans, profile }: BillingFormProps) => {
+export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [selectedPlan, setSelectedPlan] = useState<BillingPlan | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const formatter = useMemo(
-    () =>
-      new Intl.NumberFormat('en-GB', {
-        style: 'currency',
-        currency: 'GBP'
-      }),
-    []
+      () => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }),
+      []
   )
 
   const featureFlags = Array.isArray(profile?.feature_flags)
-    ? (profile?.feature_flags as string[])
-    : []
+      ? (profile?.feature_flags as string[])
+      : []
 
-  const paymentElementOptions: StripePaymentElementOptions = {
-    layout: 'tabs'
-  }
+  const paymentElementOptions: StripePaymentElementOptions = { layout: 'tabs' }
 
   const handleSelectPlan = (plan: BillingPlan) => {
     setError(null)
@@ -108,9 +105,9 @@ export const BillingForm = ({ plans, profile }: BillingFormProps) => {
 
     startTransition(async () => {
       const response =
-        plan.interval === 'one_time'
-          ? await createPaymentIntent(plan.priceId)
-          : await createSubscription(plan.priceId)
+          plan.interval === 'one_time'
+              ? await actions.createPaymentIntent(plan.priceId)
+              : await actions.createSubscription(plan.priceId)
 
       if (response?.error) {
         setError(response.error)
