@@ -1,5 +1,3 @@
-'use server'
-
 import { createClient } from '../supabase/server'
 import { stripe } from '../stripe/server'
 import { billingPlans } from './plans'
@@ -44,6 +42,7 @@ const ensureStripeCustomer = async (userId: string, email?: string | null) => {
 }
 
 export async function createPaymentIntent(priceId: string) {
+  'use server'
   const supabase = await createClient()
   const { data: userData, error: userError } = await supabase.auth.getUser()
 
@@ -85,6 +84,7 @@ export async function createPaymentIntent(priceId: string) {
 }
 
 export async function createSubscription(priceId: string) {
+  'use server'
   const supabase = await createClient()
   const { data: userData, error: userError } = await supabase.auth.getUser()
 
@@ -130,6 +130,7 @@ export async function createSubscription(priceId: string) {
 }
 
 export async function getBillingProfile() {
+  'use server'
   const supabase = await createClient()
   const { data: userData, error: userError } = await supabase.auth.getUser()
 
