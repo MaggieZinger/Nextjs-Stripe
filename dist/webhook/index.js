@@ -121,6 +121,7 @@ var handleSubscriptionUpdate = async (subscription) => {
   await updateProfileForCustomer(String(subscription.customer), {
     stripe_subscription_id: subscription.id,
     stripe_subscription_status: subscription.status,
+    stripe_price_id: priceIds[0] ?? null,
     stripe_current_period_end: toIsoString(subscription.current_period_end),
     feature_flags: nextFlags
   });

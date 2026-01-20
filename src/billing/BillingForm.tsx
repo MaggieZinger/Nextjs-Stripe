@@ -21,6 +21,7 @@ export type BillingPlan = {
 
 type BillingProfile = {
   stripe_subscription_status: string | null
+  stripe_price_id: string | null
   stripe_current_period_end: string | null
   feature_flags: unknown
 }
@@ -102,13 +103,13 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
     if (plan.interval === 'one_time') {
       return plan.flags.some(flag => featureFlags.includes(flag))
     }
-    return plan.flags.some(flag => featureFlags.includes(flag)) && 
+    return profile?.stripe_price_id === plan.priceId && 
            profile?.stripe_subscription_status === 'active'
   }
 
   const isSubscriptionActive = (plan: BillingPlan) => {
     return plan.interval !== 'one_time' && 
-           plan.flags.some(flag => featureFlags.includes(flag)) &&
+           profile?.stripe_price_id === plan.priceId &&
            profile?.stripe_subscription_status === 'active'
   }
 

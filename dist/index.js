@@ -210,7 +210,7 @@ async function getBillingProfile() {
     return { error: "Not authenticated." };
   }
   const { data: profile, error } = await supabase.from("profiles").select(
-    "stripe_subscription_status, stripe_current_period_end, feature_flags"
+    "stripe_subscription_status, stripe_price_id, stripe_current_period_end, feature_flags"
   ).eq("id", userData.user.id).single();
   if (error) {
     return { error: error.message };
@@ -402,10 +402,10 @@ var BillingForm = ({ plans, profile, actions }) => {
     if (plan.interval === "one_time") {
       return plan.flags.some((flag) => featureFlags.includes(flag));
     }
-    return plan.flags.some((flag) => featureFlags.includes(flag)) && profile?.stripe_subscription_status === "active";
+    return profile?.stripe_price_id === plan.priceId && profile?.stripe_subscription_status === "active";
   };
   const isSubscriptionActive = (plan) => {
-    return plan.interval !== "one_time" && plan.flags.some((flag) => featureFlags.includes(flag)) && profile?.stripe_subscription_status === "active";
+    return plan.interval !== "one_time" && profile?.stripe_price_id === plan.priceId && profile?.stripe_subscription_status === "active";
   };
   const handleSelectPlan = (plan) => {
     setError(null);
@@ -548,6 +548,7 @@ var handleSubscriptionUpdate = async (subscription) => {
   await updateProfileForCustomer(String(subscription.customer), {
     stripe_subscription_id: subscription.id,
     stripe_subscription_status: subscription.status,
+    stripe_price_id: priceIds[0] ?? null,
     stripe_current_period_end: toIsoString(subscription.current_period_end),
     feature_flags: nextFlags
   });

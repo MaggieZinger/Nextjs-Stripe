@@ -20,6 +20,7 @@ declare function getBillingProfile(): Promise<{
 } | {
     profile: {
         stripe_subscription_status: any;
+        stripe_price_id: any;
         stripe_current_period_end: any;
         feature_flags: any;
     };

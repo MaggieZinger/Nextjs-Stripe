@@ -12,6 +12,7 @@ type BillingPlan = {
 };
 type BillingProfile = {
     stripe_subscription_status: string | null;
+    stripe_price_id: string | null;
     stripe_current_period_end: string | null;
     feature_flags: unknown;
 };

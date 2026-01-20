@@ -210,7 +210,7 @@ async function getBillingProfile() {
     return { error: "Not authenticated." };
   }
   const { data: profile, error } = await supabase.from("profiles").select(
-    "stripe_subscription_status, stripe_current_period_end, feature_flags"
+    "stripe_subscription_status, stripe_price_id, stripe_current_period_end, feature_flags"
   ).eq("id", userData.user.id).single();
   if (error) {
     return { error: error.message };
