@@ -98,6 +98,20 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
 
   const paymentElementOptions: StripePaymentElementOptions = { layout: 'tabs' }
 
+  const isPlanActive = (plan: BillingPlan) => {
+    if (plan.interval === 'one_time') {
+      return plan.flags.some(flag => featureFlags.includes(flag))
+    }
+    return plan.flags.some(flag => featureFlags.includes(flag)) && 
+           profile?.stripe_subscription_status === 'active'
+  }
+
+  const isSubscriptionActive = (plan: BillingPlan) => {
+    return plan.interval !== 'one_time' && 
+           plan.flags.some(flag => featureFlags.includes(flag)) &&
+           profile?.stripe_subscription_status === 'active'
+  }
+
   const handleSelectPlan = (plan: BillingPlan) => {
     setError(null)
     setSelectedPlan(plan)
@@ -139,30 +153,59 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
       </Card>
 
       <div className="grid gap-4 md:grid-cols-3">
-        {plans.map((plan) => (
-          <Card key={plan.id}>
-            <CardHeader>
-              <CardTitle>{plan.name}</CardTitle>
-              <CardDescription>{plan.description}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-2xl font-semibold">
-                {formatter.format(plan.amount / 100)}
-                {plan.interval === 'month' ? '/mo' : plan.interval === 'year' ? '/yr' : ''}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Flags: {plan.flags.join(', ')}
-              </p>
-              <Button
-                onClick={() => handleSelectPlan(plan)}
-                disabled={isPending}
-                className="w-full"
-              >
-                {plan.interval === 'one_time' ? 'Buy now' : 'Subscribe'}
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+        {plans.map((plan) => {
+          const isActive = isPlanActive(plan)
+          const isActiveSubscription = isSubscriptionActive(plan)
+          
+          return (
+            <Card key={plan.id} className={isActive ? 'border-primary' : ''}>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle>{plan.name}</CardTitle>
+                    <CardDescription>{plan.description}</CardDescription>
+                  </div>
+                  {isActiveSubscription && (
+                    <span className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground">
+                      Current Plan
+                    </span>
+                  )}
+                  {isActive && plan.interval === 'one_time' && (
+                    <span className="rounded-md bg-secondary px-2 py-1 text-xs font-medium">
+                      Owned
+                    </span>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-2xl font-semibold">
+                  {formatter.format(plan.amount / 100)}
+                  {plan.interval === 'month' ? '/mo' : plan.interval === 'year' ? '/yr' : ''}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Flags: {plan.flags.join(', ')}
+                </p>
+                {isActiveSubscription && profile?.stripe_current_period_end && (
+                  <p className="text-xs text-muted-foreground">
+                    Renews: {new Date(profile.stripe_current_period_end).toLocaleDateString()}
+                  </p>
+                )}
+                <Button
+                  onClick={() => handleSelectPlan(plan)}
+                  disabled={isPending || isActiveSubscription}
+                  className="w-full"
+                  variant={isActiveSubscription ? 'secondary' : 'default'}
+                >
+                  {isActiveSubscription 
+                    ? 'Manage Subscription' 
+                    : plan.interval === 'one_time' 
+                      ? 'Buy now' 
+                      : 'Subscribe'}
+                </Button>
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
