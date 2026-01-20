@@ -69,8 +69,7 @@
   ],
   "scripts": {
     "build": "tsup",
-    "clean": "rm -rf dist",
-    "prepare": "npm run build"
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.0.2",

@@ -76,3 +76,16 @@ supabase db reset
 ```
 npm run build
 ```
+
+## Development
+
+This package is distributed via Git with pre-built files (the `dist/` folder is committed).
+
+**When making changes:**
+
+1. Make your code changes in `src/`
+2. Build the package: `npm run build`
+3. Commit both source and built files: `git add src/ dist/`
+4. Push to GitHub
+
+**Why commit dist/?** When installing from Git, npm can't build the package because peer dependencies (Next.js, React) aren't available during installation. Pre-building solves this.
