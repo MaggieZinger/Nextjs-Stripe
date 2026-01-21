@@ -23,12 +23,14 @@ type BillingProfile = {
   stripe_subscription_status: string | null
   stripe_price_id: string | null
   stripe_current_period_end: string | null
+  stripe_subscription_id: string | null
   feature_flags: unknown
 }
 
 type BillingActions = {
   createPaymentIntent: (priceId: string) => Promise<{ clientSecret?: string | null; error?: string }>
   createSubscription: (priceId: string) => Promise<{ clientSecret?: string | null; error?: string }>
+  cancelSubscription: () => Promise<{ success?: boolean; cancelAt?: string | null; error?: string }>
 }
 
 type BillingFormProps = {
@@ -87,6 +89,8 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
   const [selectedPlan, setSelectedPlan] = useState<BillingPlan | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [cancelMessage, setCancelMessage] = useState<string | null>(null)
 
   const formatter = useMemo(
       () => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }),
@@ -133,6 +137,37 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
     })
   }
 
+  const handleCancelClick = () => {
+    setShowCancelDialog(true)
+    setCancelMessage(null)
+  }
+
+  const handleCancelConfirm = () => {
+    setError(null)
+    setCancelMessage(null)
+    
+    startTransition(async () => {
+      const response = await actions.cancelSubscription()
+
+      if (response?.error) {
+        setError(response.error)
+        setShowCancelDialog(false)
+        return
+      }
+
+      if (response?.success) {
+        const cancelDate = response.cancelAt 
+          ? new Date(response.cancelAt).toLocaleDateString()
+          : 'the end of your billing period'
+        setCancelMessage(`Your subscription will be canceled on ${cancelDate}. You'll retain access until then.`)
+        setShowCancelDialog(false)
+      }
+    })
+  }
+
+  const hasActiveSubscription = profile?.stripe_subscription_status === 'active' && 
+                                  profile?.stripe_subscription_id
+
   return (
     <div className="space-y-6">
       <Card>
@@ -149,6 +184,20 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
           </p>
           {profile?.stripe_current_period_end ? (
             <p>Access ends: {new Date(profile.stripe_current_period_end).toLocaleDateString()}</p>
+          ) : null}
+          {cancelMessage ? (
+            <p className="text-sm text-muted-foreground mt-2">{cancelMessage}</p>
+          ) : null}
+          {hasActiveSubscription && !cancelMessage ? (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleCancelClick}
+              disabled={isPending}
+              className="mt-2"
+            >
+              Cancel Subscription
+            </Button>
           ) : null}
         </CardContent>
       </Card>
@@ -210,6 +259,33 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+      {showCancelDialog ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Cancel Subscription</CardTitle>
+            <CardDescription>
+              Are you sure you want to cancel your subscription? You'll retain access until the end of your billing period.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex gap-3">
+            <Button 
+              variant="destructive" 
+              onClick={handleCancelConfirm}
+              disabled={isPending}
+            >
+              {isPending ? 'Canceling...' : 'Yes, cancel subscription'}
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowCancelDialog(false)}
+              disabled={isPending}
+            >
+              Keep subscription
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {clientSecret && selectedPlan ? (
         <Card>

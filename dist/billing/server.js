@@ -210,15 +210,44 @@ async function getBillingProfile() {
     return { error: "Not authenticated." };
   }
   const { data: profile, error } = await supabase.from("profiles").select(
-    "stripe_subscription_status, stripe_price_id, stripe_current_period_end, feature_flags"
+    "stripe_subscription_status, stripe_price_id, stripe_current_period_end, feature_flags, stripe_subscription_id"
   ).eq("id", userData.user.id).single();
   if (error) {
     return { error: error.message };
   }
   return { profile };
 }
+async function cancelSubscription() {
+  "use server";
+  const supabase = await createClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData?.user) {
+    return { error: "Not authenticated." };
+  }
+  const { data: profile, error } = await supabase.from("profiles").select("stripe_subscription_id").eq("id", userData.user.id).single();
+  if (error) {
+    return { error: error.message };
+  }
+  if (!profile?.stripe_subscription_id) {
+    return { error: "No active subscription found." };
+  }
+  try {
+    const subscription = await stripe.subscriptions.update(
+      profile.stripe_subscription_id,
+      { cancel_at_period_end: true }
+    );
+    return {
+      success: true,
+      cancelAt: subscription.cancel_at ? new Date(subscription.cancel_at * 1e3).toISOString() : null
+    };
+  } catch (error2) {
+    const message = error2 instanceof Error ? error2.message : "Failed to cancel subscription.";
+    return { error: message };
+  }
+}
 export {
   billingPlans,
+  cancelSubscription,
   createPaymentIntent,
   createSubscription,
   getBillingPlansWithStripePricing,

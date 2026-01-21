@@ -141,7 +141,7 @@ export async function getBillingProfile() {
   const { data: profile, error } = await supabase
     .from('profiles')
     .select(
-      'stripe_subscription_status, stripe_price_id, stripe_current_period_end, feature_flags'
+      'stripe_subscription_status, stripe_price_id, stripe_current_period_end, feature_flags, stripe_subscription_id'
     )
     .eq('id', userData.user.id)
     .single()
@@ -151,4 +151,43 @@ export async function getBillingProfile() {
   }
 
   return { profile }
+}
+
+export async function cancelSubscription() {
+  'use server'
+  const supabase = await createClient()
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+
+  if (userError || !userData?.user) {
+    return { error: 'Not authenticated.' }
+  }
+
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .select('stripe_subscription_id')
+    .eq('id', userData.user.id)
+    .single()
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  if (!profile?.stripe_subscription_id) {
+    return { error: 'No active subscription found.' }
+  }
+
+  try {
+    const subscription = await stripe.subscriptions.update(
+      profile.stripe_subscription_id,
+      { cancel_at_period_end: true }
+    )
+
+    return {
+      success: true,
+      cancelAt: subscription.cancel_at ? new Date(subscription.cancel_at * 1000).toISOString() : null
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to cancel subscription.'
+    return { error: message }
+  }
 }

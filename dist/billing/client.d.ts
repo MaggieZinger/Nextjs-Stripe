@@ -14,6 +14,7 @@ type BillingProfile = {
     stripe_subscription_status: string | null;
     stripe_price_id: string | null;
     stripe_current_period_end: string | null;
+    stripe_subscription_id: string | null;
     feature_flags: unknown;
 };
 type BillingActions = {
@@ -23,6 +24,11 @@ type BillingActions = {
     }>;
     createSubscription: (priceId: string) => Promise<{
         clientSecret?: string | null;
+        error?: string;
+    }>;
+    cancelSubscription: () => Promise<{
+        success?: boolean;
+        cancelAt?: string | null;
         error?: string;
     }>;
 };

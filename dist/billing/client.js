@@ -174,6 +174,8 @@ var BillingForm = ({ plans, profile, actions }) => {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [error, setError] = useState(null);
   const [isPending, startTransition] = useTransition();
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelMessage, setCancelMessage] = useState(null);
   const formatter = useMemo(
     () => new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }),
     []
@@ -202,6 +204,28 @@ var BillingForm = ({ plans, profile, actions }) => {
       setClientSecret(response?.clientSecret ?? null);
     });
   };
+  const handleCancelClick = () => {
+    setShowCancelDialog(true);
+    setCancelMessage(null);
+  };
+  const handleCancelConfirm = () => {
+    setError(null);
+    setCancelMessage(null);
+    startTransition(async () => {
+      const response = await actions.cancelSubscription();
+      if (response?.error) {
+        setError(response.error);
+        setShowCancelDialog(false);
+        return;
+      }
+      if (response?.success) {
+        const cancelDate = response.cancelAt ? new Date(response.cancelAt).toLocaleDateString() : "the end of your billing period";
+        setCancelMessage(`Your subscription will be canceled on ${cancelDate}. You'll retain access until then.`);
+        setShowCancelDialog(false);
+      }
+    });
+  };
+  const hasActiveSubscription = profile?.stripe_subscription_status === "active" && profile?.stripe_subscription_id;
   return /* @__PURE__ */ jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxs(Card, { children: [
       /* @__PURE__ */ jsxs(CardHeader, { children: [
@@ -220,7 +244,19 @@ var BillingForm = ({ plans, profile, actions }) => {
         profile?.stripe_current_period_end ? /* @__PURE__ */ jsxs("p", { children: [
           "Access ends: ",
           new Date(profile.stripe_current_period_end).toLocaleDateString()
-        ] }) : null
+        ] }) : null,
+        cancelMessage ? /* @__PURE__ */ jsx3("p", { className: "text-sm text-muted-foreground mt-2", children: cancelMessage }) : null,
+        hasActiveSubscription && !cancelMessage ? /* @__PURE__ */ jsx3(
+          Button,
+          {
+            variant: "outline",
+            size: "sm",
+            onClick: handleCancelClick,
+            disabled: isPending,
+            className: "mt-2",
+            children: "Cancel Subscription"
+          }
+        ) : null
       ] })
     ] }),
     /* @__PURE__ */ jsx3("div", { className: "grid gap-4 md:grid-cols-3", children: plans.map((plan) => {
@@ -262,6 +298,32 @@ var BillingForm = ({ plans, profile, actions }) => {
       ] }, plan.id);
     }) }),
     error ? /* @__PURE__ */ jsx3("p", { className: "text-sm text-destructive", children: error }) : null,
+    showCancelDialog ? /* @__PURE__ */ jsxs(Card, { children: [
+      /* @__PURE__ */ jsxs(CardHeader, { children: [
+        /* @__PURE__ */ jsx3(CardTitle, { children: "Cancel Subscription" }),
+        /* @__PURE__ */ jsx3(CardDescription, { children: "Are you sure you want to cancel your subscription? You'll retain access until the end of your billing period." })
+      ] }),
+      /* @__PURE__ */ jsxs(CardContent, { className: "flex gap-3", children: [
+        /* @__PURE__ */ jsx3(
+          Button,
+          {
+            variant: "destructive",
+            onClick: handleCancelConfirm,
+            disabled: isPending,
+            children: isPending ? "Canceling..." : "Yes, cancel subscription"
+          }
+        ),
+        /* @__PURE__ */ jsx3(
+          Button,
+          {
+            variant: "outline",
+            onClick: () => setShowCancelDialog(false),
+            disabled: isPending,
+            children: "Keep subscription"
+          }
+        )
+      ] })
+    ] }) : null,
     clientSecret && selectedPlan ? /* @__PURE__ */ jsxs(Card, { children: [
       /* @__PURE__ */ jsx3(CardHeader, { children: /* @__PURE__ */ jsxs(CardTitle, { children: [
         "Complete payment for ",

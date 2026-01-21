@@ -23,7 +23,17 @@ declare function getBillingProfile(): Promise<{
         stripe_price_id: any;
         stripe_current_period_end: any;
         feature_flags: any;
+        stripe_subscription_id: any;
     };
+    error?: undefined;
+}>;
+declare function cancelSubscription(): Promise<{
+    error: string;
+    success?: undefined;
+    cancelAt?: undefined;
+} | {
+    success: boolean;
+    cancelAt: string | null;
     error?: undefined;
 }>;
 
@@ -42,4 +52,4 @@ declare const getBillingPlansWithStripePricing: () => Promise<BillingPlan[]>;
 declare const getFlagsForPriceIds: (priceIds: string[]) => string[];
 declare const subscriptionFlagSet: Set<string>;
 
-export { type BillingPlan, billingPlans, createPaymentIntent, createSubscription, getBillingPlansWithStripePricing, getBillingProfile, getFlagsForPriceIds, subscriptionFlagSet };
+export { type BillingPlan, billingPlans, cancelSubscription, createPaymentIntent, createSubscription, getBillingPlansWithStripePricing, getBillingProfile, getFlagsForPriceIds, subscriptionFlagSet };
