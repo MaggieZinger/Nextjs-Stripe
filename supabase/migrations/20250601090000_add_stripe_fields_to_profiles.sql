@@ -4,6 +4,7 @@ ALTER TABLE public.profiles
   ADD COLUMN stripe_subscription_status TEXT,
   ADD COLUMN stripe_price_id TEXT,
   ADD COLUMN stripe_current_period_end TIMESTAMPTZ,
+  ADD COLUMN stripe_trial_end TIMESTAMPTZ,
   ADD COLUMN feature_flags JSONB DEFAULT '[]'::jsonb;
 
 CREATE UNIQUE INDEX IF NOT EXISTS profiles_stripe_customer_id_key

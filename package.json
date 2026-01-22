@@ -54,6 +54,10 @@
       "types": "./dist/ui/button.d.ts",
       "import": "./dist/ui/button.js"
     },
+    "./ui/badge": {
+      "types": "./dist/ui/badge.d.ts",
+      "import": "./dist/ui/badge.js"
+    },
     "./ui/card": {
       "types": "./dist/ui/card.d.ts",
       "import": "./dist/ui/card.js"

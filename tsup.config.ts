@@ -14,6 +14,7 @@ export default defineConfig({
     'supabase/client': 'src/supabase/client.ts',
     'supabase/admin': 'src/supabase/admin.ts',
     'ui/button': 'src/ui/button.tsx',
+    'ui/badge': 'src/ui/badge.tsx',
     'ui/card': 'src/ui/card.tsx',
     'ui/cn': 'src/ui/cn.ts'
   },

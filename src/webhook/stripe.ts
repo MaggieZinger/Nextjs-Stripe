@@ -72,6 +72,7 @@ const handleSubscriptionUpdate = async (subscription: Stripe.Subscription) => {
     stripe_subscription_status: subscription.status,
     stripe_price_id: priceIds[0] ?? null,
     stripe_current_period_end: toIsoString(subscription.current_period_end),
+    stripe_trial_end: toIsoString(subscription.trial_end),
     feature_flags: nextFlags
   })
 }

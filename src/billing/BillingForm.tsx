@@ -7,6 +7,7 @@ import type { StripePaymentElementOptions } from '@stripe/stripe-js'
 import { stripePromise } from '../stripe/client'
 import { Button } from '../ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
+import { Badge } from '../ui/badge'
 
 export type BillingPlan = {
   id: string
@@ -24,6 +25,7 @@ type BillingProfile = {
   stripe_price_id: string | null
   stripe_current_period_end: string | null
   stripe_subscription_id: string | null
+  stripe_trial_end: string | null
   feature_flags: unknown
 }
 
@@ -31,6 +33,7 @@ type BillingActions = {
   createPaymentIntent: (priceId: string) => Promise<{ clientSecret?: string | null; error?: string }>
   createSubscription: (priceId: string) => Promise<{ clientSecret?: string | null; error?: string }>
   cancelSubscription: () => Promise<{ success?: boolean; cancelAt?: string | null; error?: string }>
+  createCustomerPortalSession: (returnUrl: string) => Promise<{ url?: string; error?: string }>
 }
 
 type BillingFormProps = {
@@ -168,37 +171,139 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
   const hasActiveSubscription = profile?.stripe_subscription_status === 'active' && 
                                   profile?.stripe_subscription_id
 
+  const getSubscriptionStatusBadge = () => {
+    const status = profile?.stripe_subscription_status
+    if (!status) return null
+
+    const statusConfig: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'default' }> = {
+      active: { label: 'Active', variant: 'success' },
+      trialing: { label: 'Trial', variant: 'success' },
+      past_due: { label: 'Past Due', variant: 'warning' },
+      canceled: { label: 'Canceled', variant: 'error' },
+      unpaid: { label: 'Unpaid', variant: 'error' },
+      incomplete: { label: 'Incomplete', variant: 'warning' },
+      incomplete_expired: { label: 'Expired', variant: 'error' },
+      paused: { label: 'Paused', variant: 'default' },
+    }
+
+    const config = statusConfig[status]
+    if (!config) return <Badge>{status}</Badge>
+
+    return <Badge variant={config.variant}>{config.label}</Badge>
+  }
+
+  const handleManagePaymentClick = () => {
+    startTransition(async () => {
+      const response = await actions.createCustomerPortalSession(window.location.href)
+      
+      if (response?.error) {
+        setError(response.error)
+        return
+      }
+
+      if (response?.url) {
+        window.location.href = response.url
+      }
+    })
+  }
+
+  const isPaymentFailed = profile?.stripe_subscription_status === 'past_due' || 
+                          profile?.stripe_subscription_status === 'unpaid'
+
+  const isInTrial = profile?.stripe_subscription_status === 'trialing'
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Your access</CardTitle>
+          <CardTitle>Your Access</CardTitle>
           <CardDescription>
-            Subscription status: {profile?.stripe_subscription_status ?? 'none'}
+            {profile?.stripe_subscription_status ? (
+              <div className="flex items-center gap-2 mt-2">
+                <span>Status:</span>
+                {getSubscriptionStatusBadge()}
+              </div>
+            ) : (
+              <span>No active subscription</span>
+            )}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <p>
-            Current flags:{' '}
-            {featureFlags.length ? featureFlags.join(', ') : 'none'}
-          </p>
-          {profile?.stripe_current_period_end ? (
-            <p>Access ends: {new Date(profile.stripe_current_period_end).toLocaleDateString()}</p>
-          ) : null}
-          {cancelMessage ? (
-            <p className="text-sm text-muted-foreground mt-2">{cancelMessage}</p>
-          ) : null}
-          {hasActiveSubscription && !cancelMessage ? (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleCancelClick}
-              disabled={isPending}
-              className="mt-2"
-            >
-              Cancel Subscription
-            </Button>
-          ) : null}
+        <CardContent className="space-y-3">
+          {/* Payment failure warning */}
+          {isPaymentFailed && (
+            <div className="rounded-md bg-yellow-50 p-3 border border-yellow-200">
+              <p className="text-sm font-medium text-yellow-800">Payment Required</p>
+              <p className="text-sm text-yellow-700 mt-1">
+                Your last payment failed. Please update your payment method to maintain access.
+              </p>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleManagePaymentClick}
+                disabled={isPending}
+                className="mt-2 bg-white hover:bg-yellow-50"
+              >
+                {isPending ? 'Loading...' : 'Update Payment Method'}
+              </Button>
+            </div>
+          )}
+
+          {/* Trial information */}
+          {isInTrial && profile?.stripe_trial_end && (
+            <div className="rounded-md bg-blue-50 p-3 border border-blue-200">
+              <p className="text-sm font-medium text-blue-800">Trial Period</p>
+              <p className="text-sm text-blue-700">
+                Your trial ends on {new Date(profile.stripe_trial_end).toLocaleDateString()}
+              </p>
+            </div>
+          )}
+
+          {/* Feature flags */}
+          <div className="text-sm">
+            <p className="font-medium text-muted-foreground mb-1">Active Features:</p>
+            <p className="text-foreground">
+              {featureFlags.length ? featureFlags.join(', ') : 'None'}
+            </p>
+          </div>
+
+          {/* Access period */}
+          {profile?.stripe_current_period_end && (
+            <div className="text-sm">
+              <p className="font-medium text-muted-foreground mb-1">
+                {profile.stripe_subscription_status === 'canceled' ? 'Access ends:' : 'Renews:'}
+              </p>
+              <p className="text-foreground">
+                {new Date(profile.stripe_current_period_end).toLocaleDateString()}
+              </p>
+            </div>
+          )}
+
+          {/* Cancellation message */}
+          {cancelMessage && (
+            <p className="text-sm text-muted-foreground p-2 bg-muted rounded">{cancelMessage}</p>
+          )}
+
+          {/* Action buttons */}
+          {hasActiveSubscription && !cancelMessage && (
+            <div className="flex gap-2 pt-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleCancelClick}
+                disabled={isPending}
+              >
+                Cancel Subscription
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleManagePaymentClick}
+                disabled={isPending}
+              >
+                Manage Billing
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

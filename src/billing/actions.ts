@@ -141,7 +141,7 @@ export async function getBillingProfile() {
   const { data: profile, error } = await supabase
     .from('profiles')
     .select(
-      'stripe_subscription_status, stripe_price_id, stripe_current_period_end, feature_flags, stripe_subscription_id'
+      'stripe_subscription_status, stripe_price_id, stripe_current_period_end, stripe_trial_end, feature_flags, stripe_subscription_id'
     )
     .eq('id', userData.user.id)
     .single()
@@ -188,6 +188,42 @@ export async function cancelSubscription() {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to cancel subscription.'
+    return { error: message }
+  }
+}
+
+export async function createCustomerPortalSession(returnUrl: string) {
+  'use server'
+  const supabase = await createClient()
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+
+  if (userError || !userData?.user) {
+    return { error: 'Not authenticated.' }
+  }
+
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .select('stripe_customer_id')
+    .eq('id', userData.user.id)
+    .single()
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  if (!profile?.stripe_customer_id) {
+    return { error: 'No Stripe customer found. Please make a purchase first.' }
+  }
+
+  try {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: profile.stripe_customer_id,
+      return_url: returnUrl
+    })
+
+    return { url: session.url }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create portal session.'
     return { error: message }
   }
 }
