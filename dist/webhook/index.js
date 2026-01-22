@@ -112,35 +112,20 @@ var handlePaymentIntentSucceeded = async (paymentIntent) => {
   });
 };
 var handleSubscriptionUpdate = async (subscription) => {
-  console.log("[Webhook] Processing subscription update:", {
-    subscriptionId: subscription.id,
-    customerId: subscription.customer,
-    status: subscription.status
-  });
-  if (!subscription.customer) {
-    console.log("[Webhook] No customer on subscription, skipping");
-    return;
-  }
+  if (!subscription.customer) return;
   const priceIds = subscription.items.data.map((item) => item.price?.id).filter((id) => Boolean(id));
-  console.log("[Webhook] Extracted price IDs:", priceIds);
   const flags = getFlagsForPriceIds(priceIds);
-  console.log("[Webhook] Flags for price IDs:", flags);
   const currentFlags = await getProfileFlagsForCustomer(String(subscription.customer));
-  console.log("[Webhook] Current profile flags:", currentFlags);
   const retainedFlags = currentFlags.filter((flag) => !subscriptionFlagSet.has(flag));
   const nextFlags = Array.from(/* @__PURE__ */ new Set([...retainedFlags, ...flags]));
-  console.log("[Webhook] Next flags:", nextFlags);
-  const updates = {
+  await updateProfileForCustomer(String(subscription.customer), {
     stripe_subscription_id: subscription.id,
     stripe_subscription_status: subscription.status,
     stripe_price_id: priceIds[0] ?? null,
     stripe_current_period_end: toIsoString(subscription.current_period_end),
     stripe_trial_end: toIsoString(subscription.trial_end),
     feature_flags: nextFlags
-  };
-  console.log("[Webhook] Updating profile with:", updates);
-  await updateProfileForCustomer(String(subscription.customer), updates);
-  console.log("[Webhook] Profile updated successfully");
+  });
 };
 var handleSubscriptionDeleted = async (subscription) => {
   if (!subscription.customer) return;
@@ -179,33 +164,25 @@ async function POST(request) {
     return new Response(message, { status: 400 });
   }
   try {
-    console.log("[Webhook] Received event:", event.type);
     switch (event.type) {
       case "payment_intent.succeeded":
-        console.log("[Webhook] Processing payment_intent.succeeded");
         await handlePaymentIntentSucceeded(event.data.object);
         break;
       case "invoice.paid":
-        console.log("[Webhook] Processing invoice.paid");
         await handleInvoicePaid(event.data.object);
         break;
       case "customer.subscription.created":
       case "customer.subscription.updated":
-        console.log("[Webhook] Processing subscription event:", event.type);
         await handleSubscriptionUpdate(event.data.object);
         break;
       case "customer.subscription.deleted":
-        console.log("[Webhook] Processing customer.subscription.deleted");
         await handleSubscriptionDeleted(event.data.object);
         break;
       default:
-        console.log("[Webhook] Unhandled event type:", event.type);
         break;
     }
-    console.log("[Webhook] Successfully processed event:", event.type);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Webhook error.";
-    console.error("[Webhook] Error processing event:", error);
     return new Response(message, { status: 500 });
   }
   return new Response("ok", { status: 200 });
