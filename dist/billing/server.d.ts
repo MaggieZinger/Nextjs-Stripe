@@ -44,6 +44,15 @@ declare function createCustomerPortalSession(returnUrl: string): Promise<{
     url: string;
     error?: undefined;
 }>;
+declare function updateSubscription(newPriceId: string): Promise<{
+    error: string;
+    success?: undefined;
+    newPeriodEnd?: undefined;
+} | {
+    success: boolean;
+    newPeriodEnd: string | null;
+    error?: undefined;
+}>;
 
 type BillingPlan = {
     id: 'content_pack' | 'pro_monthly' | 'pro_annual';
@@ -60,4 +69,4 @@ declare const getBillingPlansWithStripePricing: () => Promise<BillingPlan[]>;
 declare const getFlagsForPriceIds: (priceIds: string[]) => string[];
 declare const subscriptionFlagSet: Set<string>;
 
-export { type BillingPlan, billingPlans, cancelSubscription, createCustomerPortalSession, createPaymentIntent, createSubscription, getBillingPlansWithStripePricing, getBillingProfile, getFlagsForPriceIds, subscriptionFlagSet };
+export { type BillingPlan, billingPlans, cancelSubscription, createCustomerPortalSession, createPaymentIntent, createSubscription, getBillingPlansWithStripePricing, getBillingProfile, getFlagsForPriceIds, subscriptionFlagSet, updateSubscription };

@@ -199,6 +199,9 @@ var BillingForm = ({ plans, profile, actions }) => {
   const [isPending, startTransition] = useTransition();
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancelMessage, setCancelMessage] = useState(null);
+  const [showChangePlanDialog, setShowChangePlanDialog] = useState(false);
+  const [targetPlan, setTargetPlan] = useState(null);
+  const [changeMessage, setChangeMessage] = useState(null);
   const formatter = useMemo(
     () => new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }),
     []
@@ -245,6 +248,30 @@ var BillingForm = ({ plans, profile, actions }) => {
         const cancelDate = response.cancelAt ? new Date(response.cancelAt).toLocaleDateString() : "the end of your billing period";
         setCancelMessage(`Your subscription will be canceled on ${cancelDate}. You'll retain access until then.`);
         setShowCancelDialog(false);
+      }
+    });
+  };
+  const handleChangePlanClick = (plan) => {
+    setTargetPlan(plan);
+    setShowChangePlanDialog(true);
+    setChangeMessage(null);
+  };
+  const handleChangePlanConfirm = () => {
+    if (!targetPlan) return;
+    setError(null);
+    setChangeMessage(null);
+    startTransition(async () => {
+      const response = await actions.updateSubscription(targetPlan.priceId);
+      if (response?.error) {
+        setError(response.error);
+        setShowChangePlanDialog(false);
+        return;
+      }
+      if (response?.success) {
+        const periodEnd = response.newPeriodEnd ? new Date(response.newPeriodEnd).toLocaleDateString() : "your next billing date";
+        setChangeMessage(`Plan changed successfully! Your new plan will renew on ${periodEnd}.`);
+        setShowChangePlanDialog(false);
+        window.location.reload();
       }
     });
   };
@@ -321,6 +348,7 @@ var BillingForm = ({ plans, profile, actions }) => {
           /* @__PURE__ */ jsx4("p", { className: "text-foreground", children: new Date(profile.stripe_current_period_end).toLocaleDateString() })
         ] }),
         cancelMessage && /* @__PURE__ */ jsx4("p", { className: "text-sm text-muted-foreground p-2 bg-muted rounded", children: cancelMessage }),
+        changeMessage && /* @__PURE__ */ jsx4("p", { className: "text-sm text-green-700 p-2 bg-green-50 rounded", children: changeMessage }),
         hasActiveSubscription && !cancelMessage && /* @__PURE__ */ jsxs("div", { className: "flex gap-2 pt-2", children: [
           /* @__PURE__ */ jsx4(
             Button,
@@ -348,6 +376,7 @@ var BillingForm = ({ plans, profile, actions }) => {
     /* @__PURE__ */ jsx4("div", { className: "grid gap-4 md:grid-cols-3", children: plans.map((plan) => {
       const isActive = isPlanActive(plan);
       const isActiveSubscription = isSubscriptionActive(plan);
+      const canChangeToPlan = hasActiveSubscription && plan.interval !== "one_time" && !isActiveSubscription && profile?.stripe_subscription_status === "active";
       return /* @__PURE__ */ jsxs(Card, { className: isActive ? "border-primary" : "", children: [
         /* @__PURE__ */ jsx4(CardHeader, { children: /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between", children: [
           /* @__PURE__ */ jsxs("div", { children: [
@@ -370,14 +399,23 @@ var BillingForm = ({ plans, profile, actions }) => {
             "Renews: ",
             new Date(profile.stripe_current_period_end).toLocaleDateString()
           ] }),
-          /* @__PURE__ */ jsx4(
+          canChangeToPlan ? /* @__PURE__ */ jsx4(
+            Button,
+            {
+              onClick: () => handleChangePlanClick(plan),
+              disabled: isPending,
+              className: "w-full",
+              variant: "outline",
+              children: "Change to this plan"
+            }
+          ) : /* @__PURE__ */ jsx4(
             Button,
             {
               onClick: () => handleSelectPlan(plan),
               disabled: isPending || isActiveSubscription,
               className: "w-full",
               variant: isActiveSubscription ? "secondary" : "default",
-              children: isActiveSubscription ? "Manage Subscription" : plan.interval === "one_time" ? "Buy now" : "Subscribe"
+              children: isActiveSubscription ? "Current Plan" : plan.interval === "one_time" ? "Buy now" : "Subscribe"
             }
           )
         ] })
@@ -408,6 +446,57 @@ var BillingForm = ({ plans, profile, actions }) => {
             children: "Keep subscription"
           }
         )
+      ] })
+    ] }) : null,
+    showChangePlanDialog && targetPlan ? /* @__PURE__ */ jsxs(Card, { children: [
+      /* @__PURE__ */ jsxs(CardHeader, { children: [
+        /* @__PURE__ */ jsx4(CardTitle, { children: "Change Subscription Plan" }),
+        /* @__PURE__ */ jsxs(CardDescription, { children: [
+          "Switch from your current plan to ",
+          targetPlan.name
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxs(CardContent, { className: "space-y-4", children: [
+        /* @__PURE__ */ jsxs("div", { className: "space-y-2", children: [
+          /* @__PURE__ */ jsxs("div", { className: "flex justify-between text-sm", children: [
+            /* @__PURE__ */ jsx4("span", { className: "text-muted-foreground", children: "Current Plan:" }),
+            /* @__PURE__ */ jsx4("span", { className: "font-medium", children: plans.find((p) => p.priceId === profile?.stripe_price_id)?.name || "Unknown" })
+          ] }),
+          /* @__PURE__ */ jsxs("div", { className: "flex justify-between text-sm", children: [
+            /* @__PURE__ */ jsx4("span", { className: "text-muted-foreground", children: "New Plan:" }),
+            /* @__PURE__ */ jsx4("span", { className: "font-medium", children: targetPlan.name })
+          ] }),
+          /* @__PURE__ */ jsxs("div", { className: "flex justify-between text-sm", children: [
+            /* @__PURE__ */ jsx4("span", { className: "text-muted-foreground", children: "New Price:" }),
+            /* @__PURE__ */ jsxs("span", { className: "font-medium", children: [
+              formatter.format(targetPlan.amount / 100),
+              targetPlan.interval === "month" ? "/mo" : targetPlan.interval === "year" ? "/yr" : ""
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsx4("div", { className: "rounded-md bg-blue-50 p-3 border border-blue-200", children: /* @__PURE__ */ jsxs("p", { className: "text-sm text-blue-800", children: [
+          /* @__PURE__ */ jsx4("strong", { children: "Proration:" }),
+          " You'll be charged or credited for the time remaining on your current plan. The change takes effect immediately."
+        ] }) }),
+        /* @__PURE__ */ jsxs("div", { className: "flex gap-3", children: [
+          /* @__PURE__ */ jsx4(
+            Button,
+            {
+              onClick: handleChangePlanConfirm,
+              disabled: isPending,
+              children: isPending ? "Changing plan..." : "Confirm change"
+            }
+          ),
+          /* @__PURE__ */ jsx4(
+            Button,
+            {
+              variant: "outline",
+              onClick: () => setShowChangePlanDialog(false),
+              disabled: isPending,
+              children: "Cancel"
+            }
+          )
+        ] })
       ] })
     ] }) : null,
     clientSecret && selectedPlan ? /* @__PURE__ */ jsxs(Card, { children: [

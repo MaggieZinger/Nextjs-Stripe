@@ -227,3 +227,80 @@ export async function createCustomerPortalSession(returnUrl: string) {
     return { error: message }
   }
 }
+
+export async function updateSubscription(newPriceId: string) {
+  'use server'
+  const supabase = await createClient()
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+
+  if (userError || !userData?.user) {
+    return { error: 'Not authenticated.' }
+  }
+
+  // Validate the target plan
+  const targetPlan = getPlanByPriceId(newPriceId)
+  if (!targetPlan || targetPlan.interval === 'one_time') {
+    return { error: 'Invalid plan selection. Only subscription plans are supported.' }
+  }
+
+  // Get current subscription
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .select('stripe_subscription_id, stripe_price_id, stripe_subscription_status')
+    .eq('id', userData.user.id)
+    .single()
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  if (!profile?.stripe_subscription_id) {
+    return { error: 'No active subscription found.' }
+  }
+
+  if (profile.stripe_subscription_status !== 'active' && profile.stripe_subscription_status !== 'trialing') {
+    return { error: 'Cannot change plans for inactive subscriptions.' }
+  }
+
+  // Check if trying to switch to the same plan
+  if (profile.stripe_price_id === newPriceId) {
+    return { error: 'You are already on this plan.' }
+  }
+
+  try {
+    // Get the subscription to find the subscription item ID
+    const subscription = await stripe.subscriptions.retrieve(profile.stripe_subscription_id)
+    
+    if (!subscription.items.data[0]) {
+      return { error: 'Subscription configuration error.' }
+    }
+
+    // Update the subscription with proration
+    const updatedSubscription = await stripe.subscriptions.update(
+      profile.stripe_subscription_id,
+      {
+        items: [
+          {
+            id: subscription.items.data[0].id,
+            price: newPriceId
+          }
+        ],
+        proration_behavior: 'create_prorations',
+        metadata: {
+          price_id: newPriceId,
+          supabase_user_id: userData.user.id
+        }
+      }
+    )
+
+    return {
+      success: true,
+      newPeriodEnd: updatedSubscription.current_period_end 
+        ? new Date(updatedSubscription.current_period_end * 1000).toISOString() 
+        : null
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update subscription.'
+    return { error: message }
+  }
+}

@@ -36,6 +36,11 @@ type BillingActions = {
         url?: string;
         error?: string;
     }>;
+    updateSubscription: (newPriceId: string) => Promise<{
+        success?: boolean;
+        newPeriodEnd?: string | null;
+        error?: string;
+    }>;
 };
 type BillingFormProps = {
     plans: BillingPlan[];

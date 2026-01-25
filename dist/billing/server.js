@@ -270,6 +270,60 @@ async function createCustomerPortalSession(returnUrl) {
     return { error: message };
   }
 }
+async function updateSubscription(newPriceId) {
+  "use server";
+  const supabase = await createClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData?.user) {
+    return { error: "Not authenticated." };
+  }
+  const targetPlan = getPlanByPriceId(newPriceId);
+  if (!targetPlan || targetPlan.interval === "one_time") {
+    return { error: "Invalid plan selection. Only subscription plans are supported." };
+  }
+  const { data: profile, error } = await supabase.from("profiles").select("stripe_subscription_id, stripe_price_id, stripe_subscription_status").eq("id", userData.user.id).single();
+  if (error) {
+    return { error: error.message };
+  }
+  if (!profile?.stripe_subscription_id) {
+    return { error: "No active subscription found." };
+  }
+  if (profile.stripe_subscription_status !== "active" && profile.stripe_subscription_status !== "trialing") {
+    return { error: "Cannot change plans for inactive subscriptions." };
+  }
+  if (profile.stripe_price_id === newPriceId) {
+    return { error: "You are already on this plan." };
+  }
+  try {
+    const subscription = await stripe.subscriptions.retrieve(profile.stripe_subscription_id);
+    if (!subscription.items.data[0]) {
+      return { error: "Subscription configuration error." };
+    }
+    const updatedSubscription = await stripe.subscriptions.update(
+      profile.stripe_subscription_id,
+      {
+        items: [
+          {
+            id: subscription.items.data[0].id,
+            price: newPriceId
+          }
+        ],
+        proration_behavior: "create_prorations",
+        metadata: {
+          price_id: newPriceId,
+          supabase_user_id: userData.user.id
+        }
+      }
+    );
+    return {
+      success: true,
+      newPeriodEnd: updatedSubscription.current_period_end ? new Date(updatedSubscription.current_period_end * 1e3).toISOString() : null
+    };
+  } catch (error2) {
+    const message = error2 instanceof Error ? error2.message : "Failed to update subscription.";
+    return { error: message };
+  }
+}
 export {
   billingPlans,
   cancelSubscription,
@@ -279,6 +333,7 @@ export {
   getBillingPlansWithStripePricing,
   getBillingProfile,
   getFlagsForPriceIds,
-  subscriptionFlagSet
+  subscriptionFlagSet,
+  updateSubscription
 };
 //# sourceMappingURL=server.js.map

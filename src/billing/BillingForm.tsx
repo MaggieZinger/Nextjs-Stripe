@@ -34,6 +34,7 @@ type BillingActions = {
   createSubscription: (priceId: string) => Promise<{ clientSecret?: string | null; error?: string }>
   cancelSubscription: () => Promise<{ success?: boolean; cancelAt?: string | null; error?: string }>
   createCustomerPortalSession: (returnUrl: string) => Promise<{ url?: string; error?: string }>
+  updateSubscription: (newPriceId: string) => Promise<{ success?: boolean; newPeriodEnd?: string | null; error?: string }>
 }
 
 type BillingFormProps = {
@@ -94,6 +95,9 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
   const [isPending, startTransition] = useTransition()
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [cancelMessage, setCancelMessage] = useState<string | null>(null)
+  const [showChangePlanDialog, setShowChangePlanDialog] = useState(false)
+  const [targetPlan, setTargetPlan] = useState<BillingPlan | null>(null)
+  const [changeMessage, setChangeMessage] = useState<string | null>(null)
 
   const formatter = useMemo(
       () => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }),
@@ -164,6 +168,39 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
           : 'the end of your billing period'
         setCancelMessage(`Your subscription will be canceled on ${cancelDate}. You'll retain access until then.`)
         setShowCancelDialog(false)
+      }
+    })
+  }
+
+  const handleChangePlanClick = (plan: BillingPlan) => {
+    setTargetPlan(plan)
+    setShowChangePlanDialog(true)
+    setChangeMessage(null)
+  }
+
+  const handleChangePlanConfirm = () => {
+    if (!targetPlan) return
+    
+    setError(null)
+    setChangeMessage(null)
+    
+    startTransition(async () => {
+      const response = await actions.updateSubscription(targetPlan.priceId)
+
+      if (response?.error) {
+        setError(response.error)
+        setShowChangePlanDialog(false)
+        return
+      }
+
+      if (response?.success) {
+        const periodEnd = response.newPeriodEnd 
+          ? new Date(response.newPeriodEnd).toLocaleDateString()
+          : 'your next billing date'
+        setChangeMessage(`Plan changed successfully! Your new plan will renew on ${periodEnd}.`)
+        setShowChangePlanDialog(false)
+        // Refresh the page to show updated profile
+        window.location.reload()
       }
     })
   }
@@ -283,6 +320,11 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
             <p className="text-sm text-muted-foreground p-2 bg-muted rounded">{cancelMessage}</p>
           )}
 
+          {/* Plan change message */}
+          {changeMessage && (
+            <p className="text-sm text-green-700 p-2 bg-green-50 rounded">{changeMessage}</p>
+          )}
+
           {/* Action buttons */}
           {hasActiveSubscription && !cancelMessage && (
             <div className="flex gap-2 pt-2">
@@ -311,6 +353,10 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
         {plans.map((plan) => {
           const isActive = isPlanActive(plan)
           const isActiveSubscription = isSubscriptionActive(plan)
+          const canChangeToPlan = hasActiveSubscription && 
+                                   plan.interval !== 'one_time' && 
+                                   !isActiveSubscription &&
+                                   profile?.stripe_subscription_status === 'active'
           
           return (
             <Card key={plan.id} className={isActive ? 'border-primary' : ''}>
@@ -345,18 +391,29 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
                     Renews: {new Date(profile.stripe_current_period_end).toLocaleDateString()}
                   </p>
                 )}
-                <Button
-                  onClick={() => handleSelectPlan(plan)}
-                  disabled={isPending || isActiveSubscription}
-                  className="w-full"
-                  variant={isActiveSubscription ? 'secondary' : 'default'}
-                >
-                  {isActiveSubscription 
-                    ? 'Manage Subscription' 
-                    : plan.interval === 'one_time' 
-                      ? 'Buy now' 
-                      : 'Subscribe'}
-                </Button>
+                {canChangeToPlan ? (
+                  <Button
+                    onClick={() => handleChangePlanClick(plan)}
+                    disabled={isPending}
+                    className="w-full"
+                    variant="outline"
+                  >
+                    Change to this plan
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => handleSelectPlan(plan)}
+                    disabled={isPending || isActiveSubscription}
+                    className="w-full"
+                    variant={isActiveSubscription ? 'secondary' : 'default'}
+                  >
+                    {isActiveSubscription 
+                      ? 'Current Plan' 
+                      : plan.interval === 'one_time' 
+                        ? 'Buy now' 
+                        : 'Subscribe'}
+                  </Button>
+                )}
               </CardContent>
             </Card>
           )
@@ -388,6 +445,59 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
             >
               Keep subscription
             </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {showChangePlanDialog && targetPlan ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Change Subscription Plan</CardTitle>
+            <CardDescription>
+              Switch from your current plan to {targetPlan.name}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Current Plan:</span>
+                <span className="font-medium">
+                  {plans.find(p => p.priceId === profile?.stripe_price_id)?.name || 'Unknown'}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">New Plan:</span>
+                <span className="font-medium">{targetPlan.name}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">New Price:</span>
+                <span className="font-medium">
+                  {formatter.format(targetPlan.amount / 100)}
+                  {targetPlan.interval === 'month' ? '/mo' : targetPlan.interval === 'year' ? '/yr' : ''}
+                </span>
+              </div>
+            </div>
+            <div className="rounded-md bg-blue-50 p-3 border border-blue-200">
+              <p className="text-sm text-blue-800">
+                <strong>Proration:</strong> You'll be charged or credited for the time remaining on your current plan. 
+                The change takes effect immediately.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button 
+                onClick={handleChangePlanConfirm}
+                disabled={isPending}
+              >
+                {isPending ? 'Changing plan...' : 'Confirm change'}
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowChangePlanDialog(false)}
+                disabled={isPending}
+              >
+                Cancel
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : null}
