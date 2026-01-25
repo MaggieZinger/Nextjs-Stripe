@@ -17,6 +17,7 @@ var envSchema = z.object({
   STRIPE_PRICE_CONTENT_PACK: z.string().min(1),
   STRIPE_PRICE_PRO_MONTHLY: z.string().min(1),
   STRIPE_PRICE_PRO_ANNUAL: z.string().min(1),
+  STRIPE_USE_CHECKOUT: z.string().optional().transform((val) => val !== "false").default("true"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development")
 });
 var env = envSchema.parse(process.env);
@@ -145,6 +146,20 @@ var handleInvoicePaid = async (invoice) => {
   );
   await handleSubscriptionUpdate(subscription);
 };
+var handleCheckoutSessionCompleted = async (session) => {
+  if (session.mode === "payment" && session.payment_intent) {
+    const paymentIntent = await stripe.paymentIntents.retrieve(
+      typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent.id
+    );
+    await handlePaymentIntentSucceeded(paymentIntent);
+  }
+  if (session.mode === "subscription" && session.subscription) {
+    const subscription = await stripe.subscriptions.retrieve(
+      typeof session.subscription === "string" ? session.subscription : session.subscription.id
+    );
+    await handleSubscriptionUpdate(subscription);
+  }
+};
 async function POST(request) {
   const body = await request.text();
   const headerStore = await headers();
@@ -177,6 +192,9 @@ async function POST(request) {
         break;
       case "customer.subscription.deleted":
         await handleSubscriptionDeleted(event.data.object);
+        break;
+      case "checkout.session.completed":
+        await handleCheckoutSessionCompleted(event.data.object);
         break;
       default:
         break;

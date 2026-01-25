@@ -7,6 +7,7 @@ declare const env: {
     STRIPE_PRICE_CONTENT_PACK: string;
     STRIPE_PRICE_PRO_MONTHLY: string;
     STRIPE_PRICE_PRO_ANNUAL: string;
+    STRIPE_USE_CHECKOUT: boolean;
     NODE_ENV: "development" | "production" | "test";
     SUPABASE_SERVICE_ROLE_KEY?: string | undefined;
 };

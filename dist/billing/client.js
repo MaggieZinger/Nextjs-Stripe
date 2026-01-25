@@ -192,7 +192,7 @@ var PaymentForm = ({ onClose, paymentElementOptions }) => {
     /* @__PURE__ */ jsx4(Button, { type: "submit", disabled: !stripe || isSubmitting, children: isSubmitting ? "Processing..." : "Confirm payment" })
   ] });
 };
-var BillingForm = ({ plans, profile, actions }) => {
+var BillingForm = ({ plans, profile, actions, useCheckout = true }) => {
   const [clientSecret, setClientSecret] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [error, setError] = useState(null);
@@ -221,6 +221,19 @@ var BillingForm = ({ plans, profile, actions }) => {
     setError(null);
     setSelectedPlan(plan);
     setClientSecret(null);
+    if (useCheckout && actions.createCheckoutSession) {
+      startTransition(async () => {
+        const response = await actions.createCheckoutSession(plan.priceId);
+        if (response?.error) {
+          setError(response.error);
+          return;
+        }
+        if (response?.url) {
+          window.location.href = response.url;
+        }
+      });
+      return;
+    }
     startTransition(async () => {
       const response = plan.interval === "one_time" ? await actions.createPaymentIntent(plan.priceId) : await actions.createSubscription(plan.priceId);
       if (response?.error) {
@@ -499,7 +512,7 @@ var BillingForm = ({ plans, profile, actions }) => {
         ] })
       ] })
     ] }) : null,
-    clientSecret && selectedPlan ? /* @__PURE__ */ jsxs(Card, { children: [
+    !useCheckout && clientSecret && selectedPlan ? /* @__PURE__ */ jsxs(Card, { children: [
       /* @__PURE__ */ jsx4(CardHeader, { children: /* @__PURE__ */ jsxs(CardTitle, { children: [
         "Complete payment for ",
         selectedPlan.name

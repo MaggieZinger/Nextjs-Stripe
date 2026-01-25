@@ -1,3 +1,10 @@
+declare function createCheckoutSession(priceId: string): Promise<{
+    error: string;
+    url?: undefined;
+} | {
+    url: string | null;
+    error?: undefined;
+}>;
 declare function createPaymentIntent(priceId: string): Promise<{
     error: string;
     clientSecret?: undefined;
@@ -69,4 +76,4 @@ declare const getBillingPlansWithStripePricing: () => Promise<BillingPlan[]>;
 declare const getFlagsForPriceIds: (priceIds: string[]) => string[];
 declare const subscriptionFlagSet: Set<string>;
 
-export { type BillingPlan, billingPlans, cancelSubscription, createCustomerPortalSession, createPaymentIntent, createSubscription, getBillingPlansWithStripePricing, getBillingProfile, getFlagsForPriceIds, subscriptionFlagSet, updateSubscription };
+export { type BillingPlan, billingPlans, cancelSubscription, createCheckoutSession, createCustomerPortalSession, createPaymentIntent, createSubscription, getBillingPlansWithStripePricing, getBillingProfile, getFlagsForPriceIds, subscriptionFlagSet, updateSubscription };

@@ -35,6 +35,7 @@ var envSchema = z.object({
   STRIPE_PRICE_CONTENT_PACK: z.string().min(1),
   STRIPE_PRICE_PRO_MONTHLY: z.string().min(1),
   STRIPE_PRICE_PRO_ANNUAL: z.string().min(1),
+  STRIPE_USE_CHECKOUT: z.string().optional().transform((val) => val !== "false").default("true"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development")
 });
 var env = envSchema.parse(process.env);
@@ -111,6 +112,7 @@ var subscriptionFlagSet = new Set(
 );
 
 // src/billing/actions.ts
+import { headers } from "next/headers";
 var getPlanByPriceId = (priceId) => billingPlans.find((plan) => plan.priceId === priceId);
 var ensureStripeCustomer = async (userId, email) => {
   const supabase = await createClient();
@@ -133,6 +135,48 @@ var ensureStripeCustomer = async (userId, email) => {
   }
   return customer.id;
 };
+async function createCheckoutSession(priceId) {
+  "use server";
+  const supabase = await createClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData?.user) {
+    return { error: "Not authenticated." };
+  }
+  const plan = getPlanByPriceId(priceId);
+  if (!plan) {
+    return { error: "Invalid price selection." };
+  }
+  const customerId = await ensureStripeCustomer(
+    userData.user.id,
+    userData.user.email
+  );
+  const headerStore = await headers();
+  const host = headerStore.get("host");
+  const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+  const baseUrl = `${protocol}://${host}`;
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: plan.interval === "one_time" ? "payment" : "subscription",
+      customer: customerId,
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1
+        }
+      ],
+      success_url: `${baseUrl}/billing?success=true`,
+      cancel_url: `${baseUrl}/billing?canceled=true`,
+      metadata: {
+        price_id: priceId,
+        supabase_user_id: userData.user.id
+      }
+    });
+    return { url: session.url };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create checkout session.";
+    return { error: message };
+  }
+}
 async function createPaymentIntent(priceId) {
   "use server";
   const supabase = await createClient();
@@ -327,6 +371,7 @@ async function updateSubscription(newPriceId) {
 export {
   billingPlans,
   cancelSubscription,
+  createCheckoutSession,
   createCustomerPortalSession,
   createPaymentIntent,
   createSubscription,

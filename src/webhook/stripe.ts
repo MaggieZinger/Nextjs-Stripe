@@ -103,6 +103,29 @@ const handleInvoicePaid = async (invoice: Stripe.Invoice) => {
   await handleSubscriptionUpdate(subscription)
 }
 
+const handleCheckoutSessionCompleted = async (session: Stripe.Checkout.Session) => {
+  // For one-time payments, check if there's a payment intent
+  if (session.mode === 'payment' && session.payment_intent) {
+    const paymentIntent = await stripe.paymentIntents.retrieve(
+      typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : session.payment_intent.id
+    )
+    await handlePaymentIntentSucceeded(paymentIntent)
+  }
+  
+  // For subscriptions, the subscription events will handle it
+  // but we can also handle it here as a backup
+  if (session.mode === 'subscription' && session.subscription) {
+    const subscription = await stripe.subscriptions.retrieve(
+      typeof session.subscription === 'string'
+        ? session.subscription
+        : session.subscription.id
+    )
+    await handleSubscriptionUpdate(subscription)
+  }
+}
+
 export async function POST(request: Request) {
   const body = await request.text()
   const headerStore = await headers()
@@ -139,6 +162,9 @@ export async function POST(request: Request) {
         break
       case 'customer.subscription.deleted':
         await handleSubscriptionDeleted(event.data.object as Stripe.Subscription)
+        break
+      case 'checkout.session.completed':
+        await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session)
         break
       default:
         break

@@ -35,6 +35,7 @@ var envSchema = z.object({
   STRIPE_PRICE_CONTENT_PACK: z.string().min(1),
   STRIPE_PRICE_PRO_MONTHLY: z.string().min(1),
   STRIPE_PRICE_PRO_ANNUAL: z.string().min(1),
+  STRIPE_USE_CHECKOUT: z.string().optional().transform((val) => val !== "false").default("true"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development")
 });
 var env = envSchema.parse(process.env);
@@ -111,6 +112,7 @@ var subscriptionFlagSet = new Set(
 );
 
 // src/billing/actions.ts
+import { headers } from "next/headers";
 var getPlanByPriceId = (priceId) => billingPlans.find((plan) => plan.priceId === priceId);
 var ensureStripeCustomer = async (userId, email) => {
   const supabase = await createClient();
@@ -133,6 +135,48 @@ var ensureStripeCustomer = async (userId, email) => {
   }
   return customer.id;
 };
+async function createCheckoutSession(priceId) {
+  "use server";
+  const supabase = await createClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData?.user) {
+    return { error: "Not authenticated." };
+  }
+  const plan = getPlanByPriceId(priceId);
+  if (!plan) {
+    return { error: "Invalid price selection." };
+  }
+  const customerId = await ensureStripeCustomer(
+    userData.user.id,
+    userData.user.email
+  );
+  const headerStore = await headers();
+  const host = headerStore.get("host");
+  const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+  const baseUrl = `${protocol}://${host}`;
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: plan.interval === "one_time" ? "payment" : "subscription",
+      customer: customerId,
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1
+        }
+      ],
+      success_url: `${baseUrl}/billing?success=true`,
+      cancel_url: `${baseUrl}/billing?canceled=true`,
+      metadata: {
+        price_id: priceId,
+        supabase_user_id: userData.user.id
+      }
+    });
+    return { url: session.url };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create checkout session.";
+    return { error: message };
+  }
+}
 async function createPaymentIntent(priceId) {
   "use server";
   const supabase = await createClient();
@@ -517,7 +561,7 @@ var PaymentForm = ({ onClose, paymentElementOptions }) => {
     /* @__PURE__ */ jsx4(Button, { type: "submit", disabled: !stripe2 || isSubmitting, children: isSubmitting ? "Processing..." : "Confirm payment" })
   ] });
 };
-var BillingForm = ({ plans, profile, actions }) => {
+var BillingForm = ({ plans, profile, actions, useCheckout = true }) => {
   const [clientSecret, setClientSecret] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [error, setError] = useState(null);
@@ -546,6 +590,19 @@ var BillingForm = ({ plans, profile, actions }) => {
     setError(null);
     setSelectedPlan(plan);
     setClientSecret(null);
+    if (useCheckout && actions.createCheckoutSession) {
+      startTransition(async () => {
+        const response = await actions.createCheckoutSession(plan.priceId);
+        if (response?.error) {
+          setError(response.error);
+          return;
+        }
+        if (response?.url) {
+          window.location.href = response.url;
+        }
+      });
+      return;
+    }
     startTransition(async () => {
       const response = plan.interval === "one_time" ? await actions.createPaymentIntent(plan.priceId) : await actions.createSubscription(plan.priceId);
       if (response?.error) {
@@ -824,7 +881,7 @@ var BillingForm = ({ plans, profile, actions }) => {
         ] })
       ] })
     ] }) : null,
-    clientSecret && selectedPlan ? /* @__PURE__ */ jsxs(Card, { children: [
+    !useCheckout && clientSecret && selectedPlan ? /* @__PURE__ */ jsxs(Card, { children: [
       /* @__PURE__ */ jsx4(CardHeader, { children: /* @__PURE__ */ jsxs(CardTitle, { children: [
         "Complete payment for ",
         selectedPlan.name
@@ -841,7 +898,7 @@ var BillingForm = ({ plans, profile, actions }) => {
 };
 
 // src/webhook/stripe.ts
-import { headers } from "next/headers";
+import { headers as headers2 } from "next/headers";
 
 // src/supabase/admin.ts
 import { createClient as createClient2 } from "@supabase/supabase-js";
@@ -916,9 +973,23 @@ var handleInvoicePaid = async (invoice) => {
   );
   await handleSubscriptionUpdate(subscription);
 };
+var handleCheckoutSessionCompleted = async (session) => {
+  if (session.mode === "payment" && session.payment_intent) {
+    const paymentIntent = await stripe.paymentIntents.retrieve(
+      typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent.id
+    );
+    await handlePaymentIntentSucceeded(paymentIntent);
+  }
+  if (session.mode === "subscription" && session.subscription) {
+    const subscription = await stripe.subscriptions.retrieve(
+      typeof session.subscription === "string" ? session.subscription : session.subscription.id
+    );
+    await handleSubscriptionUpdate(subscription);
+  }
+};
 async function POST(request) {
   const body = await request.text();
-  const headerStore = await headers();
+  const headerStore = await headers2();
   const signature = headerStore.get("stripe-signature");
   if (!signature) {
     return new Response("Missing stripe signature", { status: 400 });
@@ -949,6 +1020,9 @@ async function POST(request) {
       case "customer.subscription.deleted":
         await handleSubscriptionDeleted(event.data.object);
         break;
+      case "checkout.session.completed":
+        await handleCheckoutSessionCompleted(event.data.object);
+        break;
       default:
         break;
     }
@@ -963,6 +1037,7 @@ export {
   POST,
   billingPlans,
   cancelSubscription,
+  createCheckoutSession,
   createCustomerPortalSession,
   createPaymentIntent,
   createSubscription,

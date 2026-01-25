@@ -32,6 +32,7 @@ type BillingProfile = {
 type BillingActions = {
   createPaymentIntent: (priceId: string) => Promise<{ clientSecret?: string | null; error?: string }>
   createSubscription: (priceId: string) => Promise<{ clientSecret?: string | null; error?: string }>
+  createCheckoutSession?: (priceId: string) => Promise<{ url?: string | null; error?: string }>
   cancelSubscription: () => Promise<{ success?: boolean; cancelAt?: string | null; error?: string }>
   createCustomerPortalSession: (returnUrl: string) => Promise<{ url?: string; error?: string }>
   updateSubscription: (newPriceId: string) => Promise<{ success?: boolean; newPeriodEnd?: string | null; error?: string }>
@@ -41,6 +42,7 @@ type BillingFormProps = {
   plans: BillingPlan[]
   profile: BillingProfile | null
   actions: BillingActions
+  useCheckout?: boolean
 }
 
 type PaymentFormProps = {
@@ -88,7 +90,7 @@ const PaymentForm = ({ onClose, paymentElementOptions }: PaymentFormProps) => {
   )
 }
 
-export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
+export const BillingForm = ({ plans, profile, actions, useCheckout = true }: BillingFormProps) => {
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [selectedPlan, setSelectedPlan] = useState<BillingPlan | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -129,6 +131,24 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
     setSelectedPlan(plan)
     setClientSecret(null)
 
+    // If using Stripe Checkout, redirect to checkout
+    if (useCheckout && actions.createCheckoutSession) {
+      startTransition(async () => {
+        const response = await actions.createCheckoutSession!(plan.priceId)
+
+        if (response?.error) {
+          setError(response.error)
+          return
+        }
+
+        if (response?.url) {
+          window.location.href = response.url
+        }
+      })
+      return
+    }
+
+    // Otherwise use embedded form (legacy behavior)
     startTransition(async () => {
       const response =
           plan.interval === 'one_time'
@@ -502,7 +522,7 @@ export const BillingForm = ({ plans, profile, actions }: BillingFormProps) => {
         </Card>
       ) : null}
 
-      {clientSecret && selectedPlan ? (
+      {!useCheckout && clientSecret && selectedPlan ? (
         <Card>
           <CardHeader>
             <CardTitle>Complete payment for {selectedPlan.name}</CardTitle>

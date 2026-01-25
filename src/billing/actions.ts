@@ -1,6 +1,8 @@
 import { createClient } from '../supabase/server'
 import { stripe } from '../stripe/server'
 import { billingPlans } from './plans'
+import { env } from '../env/server'
+import { headers } from 'next/headers'
 
 const getPlanByPriceId = (priceId: string) =>
   billingPlans.find((plan) => plan.priceId === priceId)
@@ -39,6 +41,56 @@ const ensureStripeCustomer = async (userId: string, email?: string | null) => {
   }
 
   return customer.id
+}
+
+export async function createCheckoutSession(priceId: string) {
+  'use server'
+  const supabase = await createClient()
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+
+  if (userError || !userData?.user) {
+    return { error: 'Not authenticated.' }
+  }
+
+  const plan = getPlanByPriceId(priceId)
+  if (!plan) {
+    return { error: 'Invalid price selection.' }
+  }
+
+  const customerId = await ensureStripeCustomer(
+    userData.user.id,
+    userData.user.email
+  )
+
+  // Get the base URL from request headers
+  const headerStore = await headers()
+  const host = headerStore.get('host')
+  const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https'
+  const baseUrl = `${protocol}://${host}`
+
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: plan.interval === 'one_time' ? 'payment' : 'subscription',
+      customer: customerId,
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1
+        }
+      ],
+      success_url: `${baseUrl}/billing?success=true`,
+      cancel_url: `${baseUrl}/billing?canceled=true`,
+      metadata: {
+        price_id: priceId,
+        supabase_user_id: userData.user.id
+      }
+    })
+
+    return { url: session.url }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create checkout session.'
+    return { error: message }
+  }
 }
 
 export async function createPaymentIntent(priceId: string) {

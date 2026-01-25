@@ -5,9 +5,11 @@ Private Next.js-specific Stripe + Supabase billing integration.
 ## Features
 
 - ✅ One-time payments and recurring subscriptions
+- ✅ **Dual payment flows**: Stripe Checkout (hosted) or custom embedded form
 - ✅ Stripe webhook handling (automatic subscription updates)
 - ✅ Feature flag management based on purchases
 - ✅ Subscription cancellation with period end retention
+- ✅ Subscription plan upgrades/downgrades with proration
 - ✅ Customer Portal integration for payment management
 - ✅ Subscription status display with colored badges
 - ✅ Payment failure warnings with retry options
@@ -42,13 +44,59 @@ STRIPE_WEBHOOK_SECRET=                  # Get from: stripe listen or dashboard
 STRIPE_PRICE_CONTENT_PACK=              # One-time payment price ID
 STRIPE_PRICE_PRO_MONTHLY=               # Monthly subscription price ID
 STRIPE_PRICE_PRO_ANNUAL=                # Annual subscription price ID
+
+# Payment Flow Options
+STRIPE_USE_CHECKOUT=true                # Optional: Use Stripe Checkout (default: true)
+                                        # Set to false for custom embedded form
 ```
 
 ## Usage
 
 ### 1. Billing Page
 
-Create a billing page that displays plans and handles payments:
+The package supports two payment flows:
+- **Stripe Checkout** (default): Redirects to Stripe-hosted payment page
+- **Custom Embedded Form**: Payment form embedded directly in your app
+
+#### Option A: Stripe Checkout (Recommended - Default)
+
+```tsx
+import { BillingForm } from '@maggiezinger/nextjs-stripe/billing/client'
+import {
+    createCheckoutSession,
+    cancelSubscription,
+    createCustomerPortalSession,
+    getBillingPlansWithStripePricing,
+    getBillingProfile,
+    updateSubscription
+} from '@maggiezinger/nextjs-stripe/billing/server'
+import { env } from '@maggiezinger/nextjs-stripe/env/server'
+
+export default async function BillingPage() {
+    const [plans, profileResult] = await Promise.all([
+        getBillingPlansWithStripePricing(),
+        getBillingProfile()
+    ])
+
+    return (
+        <BillingForm
+            plans={plans}
+            profile={profileResult.profile ?? null}
+            useCheckout={env.STRIPE_USE_CHECKOUT}
+            actions={{
+                createCheckoutSession,  // For Stripe Checkout
+                updateSubscription,
+                cancelSubscription,
+                createCustomerPortalSession
+            }}
+        />
+    )
+}
+```
+
+#### Option B: Custom Embedded Form
+
+Set `STRIPE_USE_CHECKOUT=false` in your environment, then:
 
 ```tsx
 import { BillingForm } from '@maggiezinger/nextjs-stripe/billing/client'
@@ -61,6 +109,7 @@ import {
     getBillingProfile,
     updateSubscription
 } from '@maggiezinger/nextjs-stripe/billing/server'
+import { env } from '@maggiezinger/nextjs-stripe/env/server'
 
 export default async function BillingPage() {
     const [plans, profileResult] = await Promise.all([
@@ -72,12 +121,13 @@ export default async function BillingPage() {
         <BillingForm
             plans={plans}
             profile={profileResult.profile ?? null}
+            useCheckout={env.STRIPE_USE_CHECKOUT}
             actions={{
+                createPaymentIntent,    // For embedded form
+                createSubscription,     // For embedded form
                 updateSubscription,
-                createPaymentIntent,
-                createSubscription,
                 cancelSubscription,
-                createCustomerPortalSession  // Required for "Manage Billing" button
+                createCustomerPortalSession
             }}
         />
     )
@@ -104,7 +154,13 @@ stripe listen --forward-to localhost:3000/api/webhook/stripe
 **Production:**
 Add webhook endpoint in Stripe Dashboard → Developers → Webhooks:
 - URL: `https://yourdomain.com/api/webhook/stripe`
-- Events: `customer.subscription.*`, `invoice.paid`, `payment_intent.succeeded`
+- Events to select:
+  - `customer.subscription.created`
+  - `customer.subscription.updated`
+  - `customer.subscription.deleted`
+  - `invoice.paid`
+  - `payment_intent.succeeded`
+  - `checkout.session.completed` (if using Stripe Checkout)
 
 ## Database Setup
 
@@ -273,9 +329,11 @@ This package is distributed via Git with pre-built files (the `dist/` folder is 
 ```typescript
 // Server actions
 '@maggiezinger/nextjs-stripe/billing/server'
-  - createPaymentIntent()
-  - createSubscription()
+  - createCheckoutSession()        // For Stripe Checkout
+  - createPaymentIntent()          // For embedded form
+  - createSubscription()           // For embedded form
   - cancelSubscription()
+  - updateSubscription()
   - createCustomerPortalSession()
   - getBillingProfile()
   - getBillingPlansWithStripePricing()
@@ -288,8 +346,55 @@ This package is distributed via Git with pre-built files (the `dist/` folder is 
 '@maggiezinger/nextjs-stripe/webhook'
   - POST
 
+// Environment
+'@maggiezinger/nextjs-stripe/env/server'
+  - env
+
 // UI Components
 '@maggiezinger/nextjs-stripe/ui/button'
 '@maggiezinger/nextjs-stripe/ui/badge'
 '@maggiezinger/nextjs-stripe/ui/card'
 ```
+
+## Testing
+
+### Testing Stripe Checkout Mode (Default)
+
+1. Set `STRIPE_USE_CHECKOUT=true` (or leave unset)
+2. Start your app and navigate to the billing page
+3. Click "Buy now" or "Subscribe" on a plan
+4. You should be redirected to Stripe's hosted checkout page
+5. Complete payment with test card: `4242 4242 4242 4242`
+6. You'll be redirected back to `/billing?success=true`
+7. Verify webhooks update your profile's feature flags
+
+### Testing Custom Embedded Form
+
+1. Set `STRIPE_USE_CHECKOUT=false`
+2. Start your app and navigate to the billing page
+3. Click "Buy now" or "Subscribe" on a plan
+4. Payment form should appear inline (no redirect)
+5. Complete payment with test card: `4242 4242 4242 4242`
+6. Verify webhooks update your profile's feature flags
+
+### Webhook Testing
+
+Use Stripe CLI for local webhook testing:
+
+```bash
+# Start webhook forwarding
+stripe listen --forward-to localhost:3000/api/webhook/stripe
+
+# In another terminal, test specific events
+stripe trigger checkout.session.completed
+stripe trigger payment_intent.succeeded
+stripe trigger customer.subscription.created
+```
+
+### Common Test Cards
+
+- Success: `4242 4242 4242 4242`
+- Decline: `4000 0000 0000 0002`
+- Requires authentication: `4000 0025 0000 3155`
+
+For more test cards, see [Stripe Testing Docs](https://stripe.com/docs/testing).

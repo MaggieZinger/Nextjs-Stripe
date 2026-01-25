@@ -27,6 +27,10 @@ type BillingActions = {
         clientSecret?: string | null;
         error?: string;
     }>;
+    createCheckoutSession?: (priceId: string) => Promise<{
+        url?: string | null;
+        error?: string;
+    }>;
     cancelSubscription: () => Promise<{
         success?: boolean;
         cancelAt?: string | null;
@@ -46,7 +50,8 @@ type BillingFormProps = {
     plans: BillingPlan[];
     profile: BillingProfile | null;
     actions: BillingActions;
+    useCheckout?: boolean;
 };
-declare const BillingForm: ({ plans, profile, actions }: BillingFormProps) => react_jsx_runtime.JSX.Element;
+declare const BillingForm: ({ plans, profile, actions, useCheckout }: BillingFormProps) => react_jsx_runtime.JSX.Element;
 
 export { BillingForm };
