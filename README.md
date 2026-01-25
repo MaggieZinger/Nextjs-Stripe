@@ -58,7 +58,8 @@ import {
     cancelSubscription,
     createCustomerPortalSession,
     getBillingPlansWithStripePricing,
-    getBillingProfile
+    getBillingProfile,
+    updateSubscription
 } from '@maggiezinger/nextjs-stripe/billing/server'
 
 export default async function BillingPage() {
@@ -71,7 +72,8 @@ export default async function BillingPage() {
         <BillingForm
             plans={plans}
             profile={profileResult.profile ?? null}
-            actions={{ 
+            actions={{
+                updateSubscription,
                 createPaymentIntent,
                 createSubscription,
                 cancelSubscription,
